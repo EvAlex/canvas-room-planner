@@ -28,7 +28,8 @@ module.exports = {
   plugins: [
     new HtmlWebpackPlugin({
       title: "Canvas Room Planner",
-      template: "src/index.html",
+        template: "src/index.html",
+      
     }),
     new MiniCssExtractPlugin({
       filename: "bundle.css",
@@ -37,6 +38,8 @@ module.exports = {
   devServer: {
     static: path.join(__dirname, "dist"),
     compress: true,
-    port: 4000,
+      port: 4000,
+      open: true,
+    
   },
 };
