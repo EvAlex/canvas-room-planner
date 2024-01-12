@@ -1,76 +1,18 @@
-// Import stylesheets
-import './style.css';
-
-type Point = [number, number];
-
-interface DrawingContext {
-  canvas: HTMLCanvasElement;
-  ctx: CanvasRenderingContext2D;
-  scale: number;
-  base: Point;
-}
-
-enum LineThickness {
-  Thin,
-  Thick,
-}
-
-enum DoorType {
-  Left,
-  Right,
-}
-
-enum Orientation {
-  North,
-  East,
-  South,
-  West,
-}
-
-interface MoveToCommand {
-  type: 'moveTo';
-  target: Point;
-}
-
-interface SetThicknessCommand {
-  type: 'setThickness';
-  thickness: LineThickness;
-}
-
-interface DrawDoorCommand {
-  type: 'drawDoor';
-  width: number;
-  doorType: DoorType;
-  orientation: Orientation;
-}
-
-interface DrawWindowCommand {
-  type: 'drawWindow';
-  length: number;
-  isHorizontal: boolean;
-}
-
-interface DrawLineCommand {
-  type: 'drawLine';
-  start: Point;
-  end: Point;
-  thickness: LineThickness;
-}
-
-interface DrawBedCommand {
-  type: 'drawBed';
-  width: number;
-  length: number;
-  orientation: Orientation;
-}
-
-type DrawingCommand =
-  | MoveToCommand
-  | SetThicknessCommand
-  | DrawDoorCommand
-  | DrawWindowCommand
-  | DrawLineCommand
-  | DrawBedCommand;
+import { BedDrawer, DrawBedCommand } from "./drawers/bed-drawer";
+import { DoorDrawer, DoorType, DrawDoorCommand } from "./drawers/door-drawer";
+import { DrawingCommand } from "./drawers/drawing-command";
+import { DrawingContext } from "./drawers/drawing-context";
+import { DrawLineCommand, LineDrawer } from "./drawers/line-drawer";
+import { MoveToCommand, MoveToDrawer } from "./drawers/move-to-drawer";
+import { Orientation } from "./drawers/orientation";
+import {
+  SetThicknessCommand,
+  SetThicknessDrawer,
+} from "./drawers/set-thickness-drawer";
+import { DrawWindowCommand, WindowDrawer } from "./drawers/window-drawer";
+import { LineThickness } from "./line-thickness";
+import { Point } from "./point";
+import "./style.css";
 
 class DrawerFactory {
   build(): Drawer {
@@ -78,7 +20,7 @@ class DrawerFactory {
   }
 
   private initContext(): DrawingContext {
-    const canvas = document.getElementsByTagName('canvas')[0];
+    const canvas = document.getElementsByTagName("canvas")[0];
 
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
@@ -88,48 +30,44 @@ class DrawerFactory {
     const kx = canvas.width / sceneWidth;
     const ky = canvas.height / sceneHeight;
     const scale = Math.min(kx, ky);
+    const base: Point = [sceneWidth / 10, sceneHeight / 10];
 
     return {
       canvas,
-      ctx: canvas.getContext('2d'),
+      ctx: canvas.getContext("2d"),
+      base,
       scale,
-      base: [sceneWidth / 10, sceneHeight / 10],
+      currentPoint: base,
+      currentThickness: LineThickness.Thick,
     };
   }
 }
 
-const drawingSettings = {
-  windows: {
-    width: 100,
-    fill: 'lightblue',
-  },
-  bed: {
-    headboardWidth: 80,
-  }
-} as const;
-
 class Drawer {
-  private currentPoint: Point;
   private currentCross: Point | null = null;
-  private currentThickness: LineThickness;
-  private readonly commands: DrawingCommand[] = [];
+  private readonly commands: DrawingCommand<any>[] = [];
+  private readonly drawers = [
+    new MoveToDrawer(),
+    new SetThicknessDrawer(),
+    new DoorDrawer(),
+    new WindowDrawer(),
+    new BedDrawer(),
+    new LineDrawer(),
+  ] as const;
 
-  constructor(private readonly ctx: DrawingContext) {
-    this.moveTo(ctx.base);
-    this.setThickness(LineThickness.Thick);
-
+  constructor(private ctx: DrawingContext) {
     this.initEventListeners();
   }
 
   moveTo(target: Point): Drawer {
-    this.addCommand<MoveToCommand>({ type: 'moveTo', target });
+    this.addCommand<MoveToCommand>({ type: "moveTo", target });
 
     return this;
   }
 
   setThickness(thickness: LineThickness): Drawer {
     this.addCommand<SetThicknessCommand>({
-      type: 'setThickness',
+      type: "setThickness",
       thickness,
     });
 
@@ -138,7 +76,7 @@ class Drawer {
 
   drawDoor(width: number, type: DoorType, orientation: Orientation): Drawer {
     this.addCommand<DrawDoorCommand>({
-      type: 'drawDoor',
+      type: "drawDoor",
       width,
       doorType: type,
       orientation,
@@ -149,7 +87,7 @@ class Drawer {
 
   drawBed(width: number, length: number, orientation: Orientation): Drawer {
     this.addCommand<DrawBedCommand>({
-      type: 'drawBed',
+      type: "drawBed",
       width,
       length,
       orientation,
@@ -168,15 +106,9 @@ class Drawer {
 
   private drawWindow(length: number, isHorizontal: boolean): Drawer {
     this.addCommand<DrawWindowCommand>({
-      type: 'drawWindow',
+      type: "drawWindow",
       length,
       isHorizontal,
-    });
-    this.addCommand<MoveToCommand>({
-      type: 'moveTo',
-      target: isHorizontal
-        ? [this.currentPoint[0] + length, this.currentPoint[1]]
-        : [this.currentPoint[0], this.currentPoint[1] + length],
     });
 
     return this;
@@ -184,31 +116,31 @@ class Drawer {
 
   drawLineHorizontal(
     length: number,
-    thickness: LineThickness = this.currentThickness
+    thickness: LineThickness = this.ctx.currentThickness
   ): Drawer {
     return this.drawLineTo(
-      [this.currentPoint[0] + length, this.currentPoint[1]],
+      [this.ctx.currentPoint[0] + length, this.ctx.currentPoint[1]],
       thickness
     );
   }
 
   drawLineVertical(
     length: number,
-    thickness: LineThickness = this.currentThickness
+    thickness: LineThickness = this.ctx.currentThickness
   ): Drawer {
     return this.drawLineTo(
-      [this.currentPoint[0], this.currentPoint[1] + length],
+      [this.ctx.currentPoint[0], this.ctx.currentPoint[1] + length],
       thickness
     );
   }
 
   drawLineTo(
     target: Point,
-    thickness: LineThickness = this.currentThickness
+    thickness: LineThickness = this.ctx.currentThickness
   ): Drawer {
-    this.drawLine(this.currentPoint, target, thickness);
+    this.drawLine(this.ctx.currentPoint, target, thickness);
 
-    this.addCommand<MoveToCommand>({ type: 'moveTo', target });
+    this.addCommand<MoveToCommand>({ type: "moveTo", target });
 
     return this;
   }
@@ -216,10 +148,10 @@ class Drawer {
   drawLine(
     start: Point,
     end: Point,
-    thickness: LineThickness = this.currentThickness
+    thickness: LineThickness = this.ctx.currentThickness
   ) {
     this.addCommand<DrawLineCommand>({
-      type: 'drawLine',
+      type: "drawLine",
       start,
       end,
       thickness,
@@ -228,204 +160,35 @@ class Drawer {
     return this;
   }
 
-  private runCommand<T extends DrawingCommand>(command: T) {
-    switch (command.type) {
-      case 'moveTo':
-        this.runMoveToCommand(command);
-        break;
-      case 'setThickness':
-        this.runSetThicknessCommand(command);
-        break;
-      case 'drawDoor':
-        this.runDrawDoorCommand(command);
-        break;
-      case 'drawWindow':
-        this.runDrawWindowCommand(command);
-        break;
-      case 'drawBed':
-        this.runDrawBedCommand(command);
-        break;
-      case 'drawLine':
-        this.runDrawLineCommand(command);
-        break;
-      default:
-        console.error('Unhandled command: ' + command['type']);
-        break;
-    }
-  }
+  private runCommand<TCommand extends DrawingCommand<any>>(command: TCommand) {
+    const drawer = this.drawers.find((e) => e.type === command.type);
 
-  private runMoveToCommand({ target }: MoveToCommand) {
-    this.currentPoint = target;
-  }
-
-  private runSetThicknessCommand({ thickness }: SetThicknessCommand) {
-    this.currentThickness = thickness;
-  }
-
-  private runDrawDoorCommand({
-    width,
-    orientation,
-    doorType,
-  }: DrawDoorCommand) {
-    const start = [...this.currentPoint] as Point;
-    const end = [...this.currentPoint] as Point;
-
-    if (orientation === Orientation.North) {
-      start[0] += width;
-      end[0] += width;
-      end[1] -= Math.abs(width);
-    } else if (orientation === Orientation.East) {
-      start[1] += width;
-      end[0] += Math.abs(width);
-      end[1] += width;
-    } else if (orientation === Orientation.South) {
-      start[0] += width;
-      end[0] += width;
-      end[1] += Math.abs(width);
-    } else {
-      //start[1] += width;
-      end[0] -= Math.abs(width);
-      //end[1] += width;
+    if (!drawer) {
+      console.error("Unhandled command: " + command["type"]);
+      return;
     }
 
-    this.ctx.ctx.moveTo(...this.convertWorldPointToScenePoint(start));
-    this.ctx.ctx.lineTo(...this.convertWorldPointToScenePoint(end));
+    const update = drawer.draw(command as any, this.ctx);
 
-    this.ctx.ctx.arc(
-      ...this.convertWorldPointToScenePoint(this.currentPoint),
-      this.scaleWorldLengthToSceneLength(width),
-      Math.PI,
-      Math.PI / 2,
-      true
-    );
-
-    this.ctx.ctx.stroke();
-    this.ctx.ctx.closePath();
+    this.ctx = {
+      ...this.ctx,
+      ...update,
+    };
   }
 
-  private runDrawWindowCommand({ length, isHorizontal }: DrawWindowCommand) {
-    this.setStrokeStyle(LineThickness.Thick);
-    this.ctx.ctx.fillStyle = drawingSettings.windows.fill;
-
-    const startX =
-      this.currentPoint[0] -
-      (isHorizontal ? 0 : drawingSettings.windows.width / 2);
-    const startY =
-      this.currentPoint[1] -
-      (isHorizontal ? drawingSettings.windows.width / 2 : 0);
-    const start = this.convertWorldPointToScenePoint([startX, startY]);
-    const width = this.scaleWorldLengthToSceneLength(
-      isHorizontal ? length : drawingSettings.windows.width
-    );
-    const height = this.scaleWorldLengthToSceneLength(
-      isHorizontal ? drawingSettings.windows.width : length
-    );
-
-    this.ctx.ctx.rect(...start, width, height);
-    this.ctx.ctx.fill();
-    this.ctx.ctx.stroke();
-    this.ctx.ctx.closePath();
-  }
-
-  private runDrawBedCommand({ width, length, orientation }: DrawBedCommand) {
-    this.setStrokeStyle(LineThickness.Thick);
-
-    const [x, y] = this.currentPoint;
-    const [topRight, bottomRight, bottomLeft]: [Point, Point, Point] =
-      orientation === Orientation.North || orientation === Orientation.South
-        ? ([
-            [x + width, y],
-            [x + width, y + length],
-            [x, y + length],
-        ])
-        : ([
-          [x + length, y],
-          [x + length, y + width],
-          [x, y + width],
-        ]);
-
-    this.ctx.ctx.moveTo(...this.convertWorldPointToScenePoint([x, y]));
-    this.ctx.ctx.lineTo(...this.convertWorldPointToScenePoint(topRight));
-    this.ctx.ctx.lineTo(...this.convertWorldPointToScenePoint(bottomRight));
-    this.ctx.ctx.lineTo(...this.convertWorldPointToScenePoint(bottomLeft));
-    this.ctx.ctx.lineTo(...this.convertWorldPointToScenePoint([x, y]));
-    this.ctx.ctx.stroke();
-
-    const headBoardStart = [x, y] as Point;
-    const headBoardEnd = [x, y] as Point;
-
-    if (orientation === Orientation.North) {
-      headBoardStart[1] += drawingSettings.bed.headboardWidth;
-      headBoardEnd[0] = topRight[0];
-      headBoardEnd[1] = headBoardStart[1];
-    } else if (orientation === Orientation.East) {
-      headBoardStart[0] = topRight[0] - drawingSettings.bed.headboardWidth;
-      headBoardStart[1] = topRight[1];
-      headBoardEnd[0] = headBoardStart[0];
-      headBoardEnd[1] = bottomRight[1];
-    } else if (orientation === Orientation.South) {
-      headBoardStart[1] = bottomLeft[1] - drawingSettings.bed.headboardWidth;
-      headBoardEnd[0] = bottomRight[0];
-      headBoardEnd[1] = headBoardStart[1];
-    } else {
-      headBoardStart[0] += drawingSettings.bed.headboardWidth;
-      headBoardEnd[0] = headBoardStart[0];
-      headBoardEnd[1] = bottomLeft[1];
-    }
-
-    this.ctx.ctx.moveTo(...this.convertWorldPointToScenePoint(headBoardStart));
-    this.ctx.ctx.lineTo(...this.convertWorldPointToScenePoint(headBoardEnd));
-    this.ctx.ctx.stroke();
-
-  }
-
-  private runDrawLineCommand({ start, end, thickness }: DrawLineCommand) {
-    this.setStrokeStyle(thickness);
-
-    this.ctx.ctx.beginPath();
-    this.ctx.ctx.moveTo(...this.convertWorldPointToScenePoint(start));
-    this.ctx.ctx.lineTo(...this.convertWorldPointToScenePoint(end));
-    this.ctx.ctx.stroke();
-    this.ctx.ctx.closePath();
-  }
-
-  private convertWorldPointToScenePoint([x, y]: Point): Point {
-    return [
-      (this.ctx.base[0] + x) * this.ctx.scale,
-      (this.ctx.base[1] + y) * this.ctx.scale,
-    ];
-  }
-
-  private scaleWorldLengthToSceneLength(length: number): number {
-    return length * this.ctx.scale;
-  }
-
+  //  TODO: remove
   private scaleSceneLengthToWorldLength(length: number): number {
     return length / this.ctx.scale;
   }
 
-  private setStrokeStyle(thickness: LineThickness) {
-    this.ctx.ctx.strokeStyle = 'black';
-
-    switch (thickness) {
-      case LineThickness.Thick:
-        this.ctx.ctx.lineWidth = 2;
-        break;
-      case LineThickness.Thin:
-      default:
-        this.ctx.ctx.lineWidth = 1;
-        break;
-    }
-  }
-
   private initEventListeners() {
     this.ctx.canvas.tabIndex = 1;
-    this.ctx.canvas.addEventListener('keydown', (e) => this.onKeyDown(e));
-    this.ctx.canvas.addEventListener('click', (e) => this.onClick(e));
-    this.ctx.canvas.addEventListener('mousemove', (e) => this.onMouseMove(e));
+    this.ctx.canvas.addEventListener("keydown", (e) => this.onKeyDown(e));
+    this.ctx.canvas.addEventListener("click", (e) => this.onClick(e));
+    this.ctx.canvas.addEventListener("mousemove", (e) => this.onMouseMove(e));
   }
   private onKeyDown(e: KeyboardEvent) {
-    if (e.key === 'Escape') {
+    if (e.key === "Escape") {
       this.redrawScene();
       this.resetCrossPoint();
     }
@@ -455,7 +218,7 @@ class Drawer {
 
     this.drawCrossPoint(this.currentCross);
 
-    this.ctx.ctx.strokeStyle = 'red';
+    this.ctx.ctx.strokeStyle = "red";
     this.ctx.ctx.setLineDash([5, 3]);
     this.ctx.ctx.beginPath();
     this.ctx.ctx.moveTo(x1, y1);
@@ -464,14 +227,14 @@ class Drawer {
     this.ctx.ctx.closePath();
     this.ctx.ctx.setLineDash([]);
 
-    this.ctx.ctx.font = '12pt Calibri';
+    this.ctx.ctx.font = "12pt Calibri";
     this.ctx.ctx.lineWidth = 1;
     this.ctx.ctx.strokeText(
-      Intl.NumberFormat('en-US', {
+      Intl.NumberFormat("en-US", {
         maximumFractionDigits: 0,
-        style: 'unit',
-        unit: 'millimeter',
-        unitDisplay: 'short',
+        style: "unit",
+        unit: "millimeter",
+        unitDisplay: "short",
       }).format(worldDistance),
       (x2 + x1) / 2 + 5,
       (y2 + y1) / 2 - 5
@@ -492,7 +255,7 @@ class Drawer {
   }
 
   private drawCrossPoint([x, y]: Point) {
-    this.ctx.ctx.strokeStyle = 'red';
+    this.ctx.ctx.strokeStyle = "red";
     this.ctx.ctx.lineWidth = 1;
 
     this.ctx.ctx.beginPath();
@@ -511,7 +274,7 @@ class Drawer {
     this.currentCross = null;
   }
 
-  private addCommand<T extends DrawingCommand>(command: T) {
+  private addCommand<T extends DrawingCommand<any>>(command: T) {
     this.commands.push(command);
     this.runCommand(command);
   }
