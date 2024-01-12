@@ -13,6 +13,7 @@ import { DrawWindowCommand, WindowDrawer } from "./drawers/window-drawer";
 import { LineThickness } from "./line-thickness";
 import { Point } from "./point";
 import "./style.css";
+import { Toolbar } from "./toolbar";
 
 class DrawerFactory {
   build(): Drawer {
@@ -57,6 +58,16 @@ class Drawer {
 
   constructor(private ctx: DrawingContext) {
     this.initEventListeners();
+  }
+
+  zoomIn() {
+    this.ctx.scale *= 1.1;
+    this.redrawScene();
+  }
+
+  zoomOut() {
+    this.ctx.scale /= 1.1;
+    this.redrawScene();
   }
 
   moveTo(target: Point): Drawer {
@@ -173,7 +184,7 @@ class Drawer {
     this.ctx = {
       ...this.ctx,
       ...update,
-    };
+    }
   }
 
   //  TODO: remove
@@ -280,6 +291,8 @@ class Drawer {
   }
 
   private redrawScene() {
+    console.info(`Redrawing scene. Scale: ${this.ctx.scale}`);
+
     this.ctx.ctx.clearRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
 
     for (const cmd of this.commands) {
@@ -289,6 +302,10 @@ class Drawer {
 }
 
 const drawer = new DrawerFactory().build();
+const toolbar = new Toolbar();
+
+toolbar.addEventListener('zoomIn', () => drawer.zoomIn());
+toolbar.addEventListener('zoomOut', () => drawer.zoomOut());
 
 drawer
   .moveTo([0, 0])
