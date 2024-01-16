@@ -1,4 +1,4 @@
-import { Point } from "../point";
+import { Point } from "../../../point";
 import { Drawer } from "./drawer";
 import { DrawingCommand } from "./drawing-command";
 import { DrawingContext, MutableDrawingContext } from "./drawing-context";

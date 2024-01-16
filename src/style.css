@@ -2,16 +2,3 @@ body {
   margin: 0;
   position: relative;
 }
-
-canvas {
-  cursor: crosshair;
-}
-
-#toolbar {
-  position: absolute;
-  bottom: 44px;
-  left: 120px;
-  padding: 4px 8px;
-  border: 1px solid lightgray;
-  border-radius: 4px;
-}

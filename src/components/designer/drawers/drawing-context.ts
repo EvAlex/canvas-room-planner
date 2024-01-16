@@ -1,5 +1,5 @@
-import { LineThickness } from "../line-thickness";
-import { Point } from "../point";
+import { LineThickness } from "../../../line-thickness";
+import { Point } from "../../../point";
 
 export type ImmutableDrawingContext = {
   readonly canvas: HTMLCanvasElement;
